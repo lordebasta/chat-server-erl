@@ -3,14 +3,14 @@
 %% @end
 %%%-------------------------------------------------------------------
 
--module(._app).
+-module(chat_app).
 
 -behaviour(application).
 
 -export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
-    ._sup:start_link().
+    chat_sup:start_link().
 
 stop(_State) ->
     ok.
