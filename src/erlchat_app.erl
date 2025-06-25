@@ -1,16 +1,16 @@
 %%%-------------------------------------------------------------------
-%% @doc . public API
+%% @doc erlchat public API
 %% @end
 %%%-------------------------------------------------------------------
 
--module(chat_app).
+-module(erlchat_app).
 
 -behaviour(application).
 
 -export([start/2, stop/1]).
 
 start(_StartType, _StartArgs) ->
-    chat_sup:start_link().
+    erlchat_sup:start_link().
 
 stop(_State) ->
     ok.

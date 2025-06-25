@@ -1,9 +1,9 @@
 %%%-------------------------------------------------------------------
-%% @doc . top level supervisor.
+%% @doc erlchat top level supervisor.
 %% @end
 %%%-------------------------------------------------------------------
 
--module(chat_sup).
+-module(erlchat_sup).
 
 -behaviour(supervisor).
 
@@ -31,7 +31,14 @@ init([]) ->
         intensity => 0,
         period => 1
     },
-    ChildSpecs = [],
+    ChildSpecs = [
+        #{id => erlchat_server,
+          start => {erlchat_server, listen, [1234]},
+          restart => permanent,
+          shutdown => 5000,
+          type => worker,
+          modules => [erlchat_server]}
+    ],
     {ok, {SupFlags, ChildSpecs}}.
 
 %% internal functions
