@@ -6,6 +6,7 @@
 % Call echo:listen(Port) to start the service.
 listen(Port) ->
     {ok, LSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
+    erlang:display(["Started tcp server on port ", Port]),
     accept(LSocket).
 
 % Wait for incoming connections and spawn the echo loop when we get one.
