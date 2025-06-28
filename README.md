@@ -9,8 +9,12 @@ rebar3 compile
 rebar3 shell
 ```
 
-To connect to the server (UNIX):
+# To connect to the server:
 
 ```
-telnet localhost 1234
+nc localhost 1234
 ```
+You will be asked your name and then you can execute any of these commands:
+
+`SAY:<message>`: will send a message to everyone
+`WHOMAI`: will return your username
