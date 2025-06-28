@@ -9,12 +9,7 @@ listen(Port) ->
     {ok, LSocket} = gen_tcp:listen(Port, ?TCP_OPTIONS),
     io:format("Started tcp server on port ~p~n", [Port]),
 
-    ClientDict = dict:new(),
-	PidDict = dict:new(),
-    RoomDict = dict:new(),
-    RoomOwnerDict = dict:new(),
-    DictPid = spawn_link(fun() -> storage_memory:loop(ClientDict, PidDict, RoomDict, RoomOwnerDict) end),
-
+    DictPid = storage_memory:start_link(),
     accept(LSocket, DictPid).
 
 % Wait for incoming connections and spawn the echo loop when we get one.
@@ -31,7 +26,8 @@ accept(LSocket, DictPid) ->
             State = #handler_state{
                 socket = Socket,
                 username = TrimmedUsername,
-                dictpid = DictPid
+                dictpid = DictPid,
+                roomname = <<"">>  % Default room name is empty
             },
             spawn(fun() -> erlchat_handler:loop(State) end)
     end,
