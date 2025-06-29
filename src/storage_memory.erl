@@ -81,10 +81,10 @@ loop(ClientDict, PidDict, RoomDict, RoomOwnerDict) ->
                                 {ok, CurrentSockets} ->
                                         NewSockets = lists:delete(ClientSocket, CurrentSockets),
                                         TmpRooms = dict:store(RoomName, NewSockets, RoomDict),
-                                        ReceiverPid ! {room_left, RoomName},
+                                        ReceiverPid ! room_left,
                                         loop(ClientDict, PidDict, TmpRooms, RoomOwnerDict);
                                 error ->
-                                        ReceiverPid ! {room_not_found},
+                                        ReceiverPid ! room_not_found,
                                         loop(ClientDict, PidDict, RoomDict, RoomOwnerDict)
                         end;
                 

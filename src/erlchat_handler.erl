@@ -13,10 +13,11 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
 
                 "say" ->
                     case RoomName of
-                        <<"">> ->
+                        "" ->
                             SocketList = storage:get_all_sockets(DictPid, self()),
                             Label = "Global";
                         _ ->
+                            io:format("Sending message to room: ~p~n", [RoomName]),
                             SocketList = storage:get_all_sockets(DictPid, self(), RoomName),
                             Label = RoomName
                     end,
@@ -77,7 +78,7 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                         _ ->
                             case storage:leave_room(DictPid, RoomName, self(), Socket) of
                                 ok ->
-                                    gen_tcp:send(Socket, list_to_binary("You have left room: " ++ binary_to_list(RoomName) ++ "\n")),
+                                    gen_tcp:send(Socket, list_to_binary("You have left room: " ++ RoomName ++ "\n")),
                                     NewState = State#handler_state{
                                         socket = Socket,
                                         roomname = "",
@@ -86,7 +87,10 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                                     },
                                     loop(NewState);
                                 room_not_found ->
-                                    gen_tcp:send(Socket, list_to_binary("You are not in room: " ++ binary_to_list(RoomName) ++ "\n")),
+                                    gen_tcp:send(Socket, list_to_binary("You are not in room: " ++ RoomName ++ "\n")),
+                                    loop(State);
+                                timeout ->
+                                    gen_tcp:send(Socket, list_to_binary("Operation timed out.\n")),
                                     loop(State)
                             end
                     end;
@@ -99,9 +103,15 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
             io:format("Client disconnected: ~p~n", [Socket]),
             DictPid ! {remove_client, self(), Socket},
             ok;
+        {error, enotconn} ->
+            io:format("Socket ~p is not connected~n", [Socket]),
+            DictPid ! {remove_client, self(), Socket},
+            ok;
+
         {tcp_error, Socket, Reason} ->
             io:format("TCP error on socket ~p: ~p~n", [Socket, Reason]),
             ok
+        
     end.
 
 process_message(Data) ->

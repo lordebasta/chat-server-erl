@@ -61,9 +61,11 @@ join_room(MemPid, RoomName, ReceiverPid, ClientSocket) ->
 leave_room(MemPid, RoomName, ReceiverPid, ClientSocket) ->
     MemPid ! {leave_room, RoomName, ReceiverPid, ClientSocket},
     receive
-        {room_left, RoomName} ->
+        room_left ->
             ok;
-        {room_not_found} ->
+        room_not_found ->
             room_not_found
+    after
+        10 -> timetout
     end.
 
