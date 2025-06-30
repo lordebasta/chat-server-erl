@@ -26,8 +26,7 @@ accept(LSocket, DictPid) ->
             State = #handler_state{
                 socket = Socket,
                 username = TrimmedUsername,
-                dictpid = DictPid,
-                roomname = ""  % Default room name is empty
+                dictpid = DictPid
             },
             spawn(fun() -> erlchat_handler:loop(State) end)
     end,

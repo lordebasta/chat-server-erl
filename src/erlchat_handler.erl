@@ -3,7 +3,7 @@
 
 -include("records.hrl").
 
-loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Username, roomname = RoomName}) ->
+loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Username}) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, Data} ->
             {Command, Payload} = process_message(Data),
@@ -11,24 +11,14 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                 "whoami" ->
                     gen_tcp:send(Socket, list_to_binary("You are: " ++ Username ++ "\n"));
 
+                "whereami" ->
+                    RoomName = storage:get_current_room(DictPid, Socket),
+                    gen_tcp:send(Socket, list_to_binary("You are in room: " ++ RoomName ++ "\n"));
+
                 "say" ->
-                    case RoomName of
-                        "" ->
-                            SocketList = storage:get_all_sockets(DictPid, self()),
-                            Label = "Global";
-                        _ ->
-                            io:format("Sending message to room: ~p~n", [RoomName]),
-                            SocketList = storage:get_all_sockets(DictPid, self(), RoomName),
-                            Label = RoomName
-                    end,
-            
-                    lists:foreach(fun(S) -> 
-                        case S == Socket of
-                            true -> ok;
-                            false -> 
-                                gen_tcp:send(S, list_to_binary("[" ++ Label ++ "] " ++ Username ++ ": " ++ Payload ++ "\n"))
-                        end
-                    end, SocketList);
+                    RoomName = storage:get_current_room(DictPid, Socket),
+                    SocketList = storage:get_all_sockets_in_same_room(DictPid, Socket),
+                    send_message(Socket, Username, SocketList, Payload, RoomName);
 
                 "create" ->
                     io:format("Creating room with payload: ~p~n", [Payload]),
@@ -36,11 +26,10 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                         "" ->
                             gen_tcp:send(Socket, list_to_binary("Please specify a room name to create.\n"));
                         RoomToCreate ->
-                            case storage:create_room(DictPid, RoomToCreate, self(), Socket) of
+                            case storage:create_room(DictPid, RoomToCreate, Socket) of
                                 ok ->
                                     gen_tcp:send(Socket, list_to_binary("Room created: " ++ RoomToCreate ++ "\n")),
-                                    NewState = State#handler_state{roomname = list_to_binary(RoomToCreate)},
-                                    loop(NewState);
+                                    loop(State);
                                 already_exists ->
                                     gen_tcp:send(Socket, list_to_binary("Room already exists: " ++ RoomToCreate ++ "\n")),
                                     loop(State)
@@ -54,17 +43,11 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                             gen_tcp:send(Socket, list_to_binary("Please specify a room name to join.\n"));
                         SelectedRoom ->
                             io:format("Joining room with payload: ~p~n", [Payload]),
-                            case storage:join_room(DictPid, SelectedRoom, self(), Socket) of
+                            case storage:join_room(DictPid, SelectedRoom, Socket) of
                                 ok ->
                                     io:format("~p joined room: ~p~n", [Username, SelectedRoom]),
                                     gen_tcp:send(Socket, list_to_binary("You have joined room: " ++ SelectedRoom ++ "\n")),
-                                    NewState = State#handler_state{
-                                        socket = Socket,
-                                        roomname = SelectedRoom,
-                                        username = Username,
-                                        dictpid = DictPid
-                                    },
-                                    loop(NewState);
+                                    loop(State);
                                 room_not_found ->
                                     gen_tcp:send(Socket, list_to_binary("Room not found: " ++ SelectedRoom ++ "\n")),
                                     loop(State)
@@ -72,25 +55,35 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                     end;
 
                 "leave" ->
+                    RoomName = storage:get_current_room(DictPid, Socket),
                     case RoomName of
-                        <<"">> ->
+                        "" ->
                             gen_tcp:send(Socket, list_to_binary("You are not in any room.\n"));
                         _ ->
-                            case storage:leave_room(DictPid, RoomName, self(), Socket) of
+                            case storage:leave_room(DictPid, Socket) of
                                 ok ->
                                     gen_tcp:send(Socket, list_to_binary("You have left room: " ++ RoomName ++ "\n")),
-                                    NewState = State#handler_state{
-                                        socket = Socket,
-                                        roomname = "",
-                                        username = Username,
-                                        dictpid = DictPid
-                                    },
-                                    loop(NewState);
+                                    loop(State);
                                 room_not_found ->
                                     gen_tcp:send(Socket, list_to_binary("You are not in room: " ++ RoomName ++ "\n")),
+                                    loop(State)
+                            end
+                    end;
+
+                "destroy" ->
+                    case string:trim(Payload) of
+                        "" ->
+                            gen_tcp:send(Socket, <<"Please specify a room name to destroy.\n">>);
+                        RoomName ->
+                            case storage:delete_room(DictPid, RoomName, Socket) of
+                                {ok, RoomMembers} ->
+                                    send_system_message(RoomMembers, "Room destroyed: " ++ RoomName ++ "\n"),
                                     loop(State);
-                                timeout ->
-                                    gen_tcp:send(Socket, list_to_binary("Operation timed out.\n")),
+                                not_owner ->
+                                    gen_tcp:send(Socket, list_to_binary("Only the creator of the room can destroy it!\n")),
+                                    loop(State);
+                                room_not_found ->
+                                    gen_tcp:send(Socket, list_to_binary("Room not found: " ++ RoomName ++ "\n")),
                                     loop(State)
                             end
                     end;
@@ -126,3 +119,17 @@ process_message(Data) ->
     Command1 = string:trim(Command),
     Content1 = string:trim(Content),
     {Command1, Content1}.
+
+send_message(SenderSocket, SenderUsername, Sendees, Message, RoomLabel) ->
+    lists:foreach(fun(S) -> 
+        case S == SenderSocket of
+            true -> ok;
+            false -> 
+                gen_tcp:send(S, list_to_binary("[" ++ RoomLabel ++ "] " ++ SenderUsername ++ ": " ++ Message ++ "\n"))
+        end
+    end, Sendees).
+
+send_system_message(Sendees, Message) ->
+    lists:foreach(fun(S) -> 
+        gen_tcp:send(S, list_to_binary("System: " ++ Message ++ "\n"))
+    end, Sendees).

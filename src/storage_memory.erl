@@ -1,94 +1,185 @@
 -module(storage_memory).
--export([loop/4, start_link/0]).
+-export([loop/1, start_link/0]).
+
+
+-record(state, {
+    client_dict, % Username -> ClientSocket
+    pid_dict, % ClientSocket -> Username
+    room_dict, % RoomName -> ClientSockets
+    room_owner_dict, % RoomName -> ClientSocket
+    client_to_room_dict % ClientSocket -> RoomName
+}).
 
 start_link() ->
-        ClientDict = dict:new(),
-        PidDict = dict:new(),
-        RoomDict = dict:new(),
-        RoomOwnerDict = dict:new(),
-        DictPid = spawn_link(fun() -> storage_memory:loop(ClientDict, PidDict, RoomDict, RoomOwnerDict) end),
+        State = #state{
+            client_dict = dict:new(),
+            pid_dict = dict:new(),
+            room_dict = dict:new(),
+            room_owner_dict = dict:new(),
+            client_to_room_dict = dict:new()
+        },
+        DictPid = spawn_link(fun() -> storage_memory:loop(State) end),
         DictPid.
 
-loop(ClientDict, PidDict, RoomDict, RoomOwnerDict) ->
-        receive
-                {add_new_client, Socket, Username} ->
-                        io:format("Adding ~p~n", [Username]),
-                        TmpClients = dict:store(Username, Socket, ClientDict),
-                        TmpPids = dict:store(Socket, Username, PidDict),
-                        loop(TmpClients, TmpPids, RoomDict, RoomOwnerDict);
-                
-                {get_client_pid, ReceiverPid, Username} ->
-                        {ok, Cpid} = dict:find(Username, ClientDict),
-                        ReceiverPid ! {pid, Cpid},
-                        loop(ClientDict, PidDict, RoomDict, RoomOwnerDict);
-                
-                {get_username, ReceiverPid, Pid} ->
-                        {ok, Username} = dict:find(Pid, PidDict),
-                        ReceiverPid ! {username, Username},
-                        loop(ClientDict, PidDict, RoomDict, RoomOwnerDict);
-                
-                {get_all_pids, ReceiverPid} ->
-                        ReceiverPid ! {all_pids, PidDict},
-                        loop(ClientDict, PidDict, RoomDict, RoomOwnerDict);
+loop(State) ->
+    #state{
+        client_dict = ClientDict,
+        pid_dict = PidDict,
+        room_dict = RoomDict,
+        room_owner_dict = RoomOwnerDict,
+        client_to_room_dict = ClientToRoomDict
+    } = State,
+    receive
+        {add_new_client, Socket, Username} ->
+            io:format("Adding ~p~n", [Username]),
+            TmpClients = dict:store(Username, Socket, ClientDict),
+            TmpPids = dict:store(Socket, Username, PidDict),
+            NewState = State#state{
+                client_dict = TmpClients,
+                pid_dict = TmpPids
+            },
+            loop(NewState);
 
-                {remove_client, Socket} ->
-                        {ok, Username} = dict:find(Socket, PidDict),
-                        io:format("Removing ~p~n", [Username]),
-                        TmpClients = dict:erase(Username, ClientDict),
-                        TmpPids = dict:erase(Socket, PidDict),
-                        loop(TmpClients, TmpPids, RoomDict, RoomOwnerDict);
+        {get_client_pid, ReceiverPid, Username} ->
+            {ok, Cpid} = dict:find(Username, ClientDict),
+            ReceiverPid ! {pid, Cpid},
+            loop(State);
 
-                {create_room, RoomName, ReceiverPid, ClientSocket} ->
-                        case dict:is_key(RoomName, RoomDict) of 
-                                true -> ReceiverPid ! {already_exists};
-                                false ->
-                                        io:format("Creating room ~p~n", [RoomName]),
-                                        TmpRooms = dict:store(RoomName, [], RoomDict),
-                                        NewRoomOwnerDict = dict:store(RoomName, ClientSocket, RoomOwnerDict),
-                                        io:format("RoomDict: ~p~n", [dict:to_list(TmpRooms)]),
-                                        io:format("ClientDict: ~p~n", [dict:to_list(ClientDict)]),
-                                        io:format("RoomOwnerDict: ~p~n", [dict:to_list(NewRoomOwnerDict)]),
-                                        ReceiverPid ! room_created,
-                                        loop(ClientDict, PidDict, TmpRooms, NewRoomOwnerDict)
-                        end;
+        {get_username, ReceiverPid, Pid} ->
+            {ok, Username} = dict:find(Pid, PidDict),
+            ReceiverPid ! {username, Username},
+            loop(State);
 
-                {get_all_pids_in_room, ReceiverPid, Room} ->
-                        io:format("Getting all pids in room ~p~n", [Room]),
-                        io:format("RoomDict: ~p~n", [dict:to_list(RoomDict)]),
-                        case dict:find(Room, RoomDict) of
-                                {ok, Sockets} ->
-                                        ReceiverPid ! {all_pids_in_room, Sockets};
-                                error ->
-                                        ReceiverPid ! room_not_found
-                        end,
-                        loop(ClientDict, PidDict, RoomDict, RoomOwnerDict);
+        {get_current_room, ReceiverPid, ClientSocket} ->
+            RoomName = get_room(ClientSocket, ClientToRoomDict),
+            ReceiverPid ! {room, RoomName},
+            loop(State);
 
-                {join_room, RoomName, ReceiverPid, ClientSocket} ->
-                        case dict:find(RoomName, RoomDict) of
-                                {ok, CurrentSockets} ->
-                                        io:format("Joining room ~p~n", [RoomName]),
-                                        NewSockets = [ClientSocket | CurrentSockets],
-                                        TmpRooms = dict:store(RoomName, NewSockets, RoomDict),
-                                        ReceiverPid ! room_joined,
-                                        loop(ClientDict, PidDict, TmpRooms, RoomOwnerDict);
-                                error ->
-                                        ReceiverPid ! room_not_found,
-                                        loop(ClientDict, PidDict, RoomDict, RoomOwnerDict)
-                        end;
+        {remove_client, Socket} ->
+            {ok, Username} = dict:find(Socket, PidDict),
+            io:format("Removing ~p~n", [Username]),
+            TmpClients = dict:erase(Username, ClientDict),
+            TmpPids = dict:erase(Socket, PidDict),
+            NewState = State#state{
+                client_dict = TmpClients,
+                pid_dict = TmpPids
+            },
+            loop(NewState);
 
-                {leave_room, RoomName, ReceiverPid, ClientSocket} ->
-                        case dict:find(RoomName, RoomDict) of
-                                {ok, CurrentSockets} ->
-                                        NewSockets = lists:delete(ClientSocket, CurrentSockets),
-                                        TmpRooms = dict:store(RoomName, NewSockets, RoomDict),
-                                        ReceiverPid ! room_left,
-                                        loop(ClientDict, PidDict, TmpRooms, RoomOwnerDict);
-                                error ->
-                                        ReceiverPid ! room_not_found,
-                                        loop(ClientDict, PidDict, RoomDict, RoomOwnerDict)
-                        end;
-                
-                % error handling
+        {create_room, ReceiverPid, RoomName, ClientSocket} ->
+            case dict:is_key(RoomName, RoomDict) of 
+                true -> ReceiverPid ! {already_exists}, loop(State);
+                false ->
+                    io:format("Creating room ~p~n", [RoomName]),
+                    TmpRooms = dict:store(RoomName, [], RoomDict),
+                    NewRoomOwnerDict = dict:store(RoomName, ClientSocket, RoomOwnerDict),
+                    io:format("RoomDict: ~p~n", [dict:to_list(TmpRooms)]),
+                    io:format("ClientDict: ~p~n", [dict:to_list(ClientDict)]),
+                    io:format("RoomOwnerDict: ~p~n", [dict:to_list(NewRoomOwnerDict)]),
+                    ReceiverPid ! room_created,
+                    NewState = State#state{
+                        room_dict = TmpRooms,
+                        room_owner_dict = NewRoomOwnerDict
+                    },
+                    loop(NewState)
+            end;
+
+        {get_all_pids_in_room, ReceiverPid, ClientSocket} ->
+            Room = get_room(ClientSocket, ClientToRoomDict),
+            io:format("Getting all pids in room ~p~n", [Room]),
+            io:format("RoomDict: ~p~n", [dict:to_list(RoomDict)]),
+            case Room of
+                "" ->
+                    AllSockets = dict:fetch_keys(PidDict),
+                    ReceiverPid ! {all_pids_in_room, AllSockets};
                 _ ->
-                {error, "That's not an acceptable action!"}
-        end.
+                    case dict:find(Room, RoomDict) of
+                        {ok, Sockets} ->
+                            ReceiverPid ! {all_pids_in_room, Sockets};
+                        error ->
+                            ReceiverPid ! room_not_found
+                    end
+            end,
+            loop(State);
+
+        {join_room, ReceiverPid, RoomName, ClientSocket} ->
+            case dict:find(RoomName, RoomDict) of
+                {ok, CurrentSockets} ->
+                    io:format("Joining room ~p~n", [RoomName]),
+                    NewSockets = [ClientSocket | CurrentSockets],
+                    TmpRooms = dict:store(RoomName, NewSockets, RoomDict),
+                    NewClientToRoomDict = dict:store(ClientSocket, RoomName, ClientToRoomDict),
+                    ReceiverPid ! room_joined,
+                    NewState = State#state{
+                        room_dict = TmpRooms,
+                        client_to_room_dict = NewClientToRoomDict
+                    },
+                    loop(NewState);
+                error ->
+                    ReceiverPid ! room_not_found,
+                    loop(State)
+            end;
+
+        {leave_room, ReceiverPid, ClientSocket} ->
+            RoomName = get_room(ClientSocket, ClientToRoomDict),
+            case RoomName of
+                "" ->
+                    ReceiverPid ! not_in_room,
+                    loop(State);
+                RoomName ->
+                    NewClientToRoomDict = dict:erase(ClientSocket, ClientToRoomDict),
+                    NewSockets = lists:delete(ClientSocket, dict:fetch(RoomName, RoomDict)),
+                    TmpRooms = dict:store(RoomName, NewSockets, RoomDict),
+                    NewState = State#state{
+                        client_to_room_dict = NewClientToRoomDict,
+                        room_dict = TmpRooms
+                    },
+                    ReceiverPid ! room_left,
+                    loop(NewState)
+            end;
+
+        {delete_room, ReceiverPid, RoomName, ClientSocket} ->
+            case dict:find(RoomName, RoomDict) of
+                {ok, Sockets} ->
+                    case dict:find(RoomName, RoomOwnerDict) of
+                        {ok, OwnerSocket} when OwnerSocket == ClientSocket ->
+                            % Remove the room from room_dict and room_owner_dict
+                            NewRoomDict = dict:erase(RoomName, RoomDict),
+                            NewRoomOwnerDict = dict:erase(RoomName, RoomOwnerDict),
+                            % Remove all clients in this room from client_to_room_dict
+                            NewClientToRoomDict = lists:foldl(
+                                fun(Socket, AccDict) -> dict:erase(Socket, AccDict) end,
+                                ClientToRoomDict,
+                                Sockets
+                            ),
+                            NewState = State#state{
+                                room_dict = NewRoomDict,
+                                room_owner_dict = NewRoomOwnerDict,
+                                client_to_room_dict = NewClientToRoomDict
+                            },
+                            ReceiverPid ! {ok, Sockets},
+                            loop(NewState);
+                        {ok, OwnerSocket} ->
+                            io:format("~p tried to delete ~p, while ~p is the owner", [ClientSocket, RoomName, OwnerSocket]),
+                            ReceiverPid ! not_owner,
+                            loop(State);
+                        error ->
+                            ReceiverPid ! room_not_found,
+                            loop(State)
+                    end;
+                error ->
+                    ReceiverPid ! room_not_found,
+                    loop(State)
+            end;
+
+        % error handling
+        _ ->
+            {error, "That's not an acceptable action!"}
+    end.
+
+
+get_room(Client, ClientToRoomDict) ->
+    case dict:find(Client, ClientToRoomDict) of
+        {ok, RoomName} -> RoomName;
+        error -> ""
+    end.
