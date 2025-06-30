@@ -18,6 +18,8 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                 "say" ->
                     RoomName = storage:get_current_room(DictPid, Socket),
                     SocketList = storage:get_all_sockets_in_same_room(DictPid, Socket),
+                    io:format("Sending message to room ~p with payload: ~p~n", [RoomName, Payload]),
+                    io:format("SocketList: ~p~n", [SocketList]),
                     send_message(Socket, Username, SocketList, Payload, RoomName);
 
                 "create" ->
@@ -50,6 +52,9 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                                     loop(State);
                                 room_not_found ->
                                     gen_tcp:send(Socket, list_to_binary("Room not found: " ++ SelectedRoom ++ "\n")),
+                                    loop(State);
+                                not_invited ->
+                                    gen_tcp:send(Socket, list_to_binary("You are not invited to this room: " ++ SelectedRoom ++ "\n")),
                                     loop(State)
                             end
                     end;
@@ -105,6 +110,52 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                         _ ->
                             gen_tcp:send(Socket, list_to_binary("Usage: whisper: <username> <message>\n")),
                             loop(State)
+                    end;
+
+                "private" ->
+                    case string:trim(Payload) of
+                        "" ->
+                            gen_tcp:send(Socket, list_to_binary("Please specify a room name for the private room.\n"));
+                        RoomName ->
+                            case storage:create_private_room(DictPid, RoomName, Socket) of
+                                ok ->
+                                    gen_tcp:send(Socket, list_to_binary("Private room created: " ++ RoomName ++ "\n")),
+                                    loop(State);
+                                already_exists ->
+                                    gen_tcp:send(Socket, list_to_binary("Private room already exists: " ++ RoomName ++ "\n")),
+                                    loop(State)
+                            end
+                    end;
+
+                "invite" ->
+                    case storage:get_current_room(DictPid, Socket) of
+                        "" ->
+                            gen_tcp:send(Socket, list_to_binary("You are not in any room to invite users.\n")),
+                            loop(State);
+                        RoomName ->
+                            io:format("Inviting user with payload: ~p~n", [Payload]),
+                            case string:trim(Payload) of
+                                "" ->
+                                    gen_tcp:send(Socket, list_to_binary("Please specify a username to invite.\n"));
+                                InviteeName ->
+                                    case storage:invite(DictPid, Socket, InviteeName) of
+                                        ok ->
+                                            gen_tcp:send(Socket, list_to_binary("Invitation sent to " ++ InviteeName ++ "\n")),
+                                            {ok, InviteeSocket} = storage:get_client_pid(DictPid, InviteeName),
+                                            RoomName = storage:get_current_room(DictPid, Socket),
+                                            gen_tcp:send(InviteeSocket, list_to_binary("You have been invited to join " ++ RoomName ++ " by " ++ Username ++ ".\n")),
+                                            loop(State);
+                                        not_owner ->
+                                            gen_tcp:send(Socket, list_to_binary("Only the room owner can invite users!\n")),
+                                            loop(State);
+                                        user_not_found ->
+                                            gen_tcp:send(Socket, list_to_binary("No user found.\n")),
+                                            loop(State);
+                                        public_room ->
+                                            gen_tcp:send(Socket, list_to_binary("You cannot invite users to a public room.\n")),
+                                            loop(State)
+                                    end
+                            end
                     end;
 
                 _ ->

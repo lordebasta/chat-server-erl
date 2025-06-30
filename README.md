@@ -19,7 +19,7 @@ You will be asked your name and then you can execute any of these commands:
 `say:<message>`: will send a message to everyone in the current room you are. If you're not in a room, you will send the message globally.
 `whoami`: will return your username.
 `whereami`: will return your current room.
-`create:<room_name>`: will create a room with the provided name.
+`create:<room_name>`: will create a room with the provided name. You still have to join the room after creating.
 `destroy:<room_name>`: will delete the room and kick everyone in it, if you are the room creator.
 `join:<room_name>`: will join the room.
 `leave`: will kick you out of the room you are currently in.

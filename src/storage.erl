@@ -1,6 +1,7 @@
 -module(storage).
 -export([get_username/2, add_client/3, get_client_pid/2, get_current_room/2, get_all_sockets_in_same_room/2,
-        create_room/3, delete_room/3, list_rooms/1, join_room/3, leave_room/2]).
+        create_room/3, delete_room/3, list_rooms/1, join_room/3, leave_room/2, create_private_room/3,
+        invite/3]).
 
 add_client(MemPid, Socket, Username) ->
     MemPid ! {add_new_client, Socket, Username},
@@ -72,6 +73,8 @@ join_room(MemPid, RoomName, ClientSocket) ->
     receive
         room_joined ->
             ok;
+        not_invited ->
+            not_invited;
         room_not_found ->
             room_not_found
     end.
@@ -85,3 +88,24 @@ leave_room(MemPid, ClientSocket) ->
             not_in_room
     end.
 
+create_private_room(MemPid, RoomName, Owner) ->
+    MemPid ! {create_private_room, self(), RoomName, Owner},
+    receive
+        ok ->
+            ok;
+        already_exists ->
+            already_exists
+    end.
+
+invite(MemPid, InviterSocket, InviteeName) ->
+    MemPid ! {invite, self(), InviterSocket, InviteeName},
+    receive
+        ok ->
+            ok;
+        not_owner ->
+            not_owner;
+        public_room ->
+            public_room;
+        user_not_found ->
+            user_not_found
+    end.
