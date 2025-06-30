@@ -1,7 +1,24 @@
 -module(erlchat_handler).
--export([loop/1]).
+-export([loop/1, init/2]).
 
 -include("records.hrl").
+
+init(Socket, DictPid) ->
+    gen_tcp:send(Socket, <<"Welcome! Insert your username: ">>),
+    case gen_tcp:recv(Socket, 0) of
+        {ok, Username} ->
+            UsernameStr = binary_to_list(Username),
+            TrimmedUsername = string:trim(UsernameStr),
+            io:format("New client connected: ~p~n", [TrimmedUsername]),
+            % Start the dict handler process to manage clients
+            storage:add_client(DictPid, Socket, TrimmedUsername),
+            State = #handler_state{
+                socket = Socket,
+                username = TrimmedUsername,
+                dictpid = DictPid
+            },
+            loop(State)
+    end.
 
 loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Username}) ->
     case gen_tcp:recv(Socket, 0) of

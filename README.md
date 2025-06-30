@@ -27,4 +27,4 @@ You will be asked your name and then you can execute any of these commands:
 
 # Notes
 
-The `accept` function should be run on the handler to handle concurrent clients trying to login at the same time.
+I left `io:format` calls inside the server because it's useful for development.

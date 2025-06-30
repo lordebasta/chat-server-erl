@@ -15,19 +15,6 @@ listen(Port) ->
 % Wait for incoming connections and spawn the echo loop when we get one.
 accept(LSocket, DictPid) ->
     {ok, Socket} = gen_tcp:accept(LSocket),
-    gen_tcp:send(Socket, <<"Welcome! Insert your username: ">>),
-    case gen_tcp:recv(Socket, 0) of
-        {ok, Username} ->
-            UsernameStr = binary_to_list(Username),
-            TrimmedUsername = string:trim(UsernameStr),
-            io:format("New client connected: ~p~n", [TrimmedUsername]),
-            % Start the dict handler process to manage clients
-            storage:add_client(DictPid, Socket, TrimmedUsername),
-            State = #handler_state{
-                socket = Socket,
-                username = TrimmedUsername,
-                dictpid = DictPid
-            },
-            spawn(fun() -> erlchat_handler:loop(State) end)
-    end,
+
+    spawn(fun() -> erlchat_handler:init(Socket, DictPid) end),
     accept(LSocket, DictPid).
