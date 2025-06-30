@@ -88,6 +88,25 @@ loop(State = #handler_state{socket = Socket, dictpid = DictPid, username = Usern
                             end
                     end;
 
+                "whisper" ->
+                    case string:tokens(Payload, " ") of
+                        [ToUser | MsgList] when MsgList =/= [] ->
+                            Message = string:join(MsgList, " "),
+                            io:format("~p whispers ~p: ~p", [Socket, ToUser, MsgList]),
+                            case storage:get_client_pid(DictPid, ToUser) of
+                                {ok, SendeeSocket} ->
+                                    gen_tcp:send(SendeeSocket, list_to_binary("[whisper] " ++ Username ++ ": " ++ Message ++ "\n")),
+                                    gen_tcp:send(Socket, list_to_binary("[whisper to " ++ ToUser ++ "] " ++ Message ++ "\n")),
+                                    loop(State);
+                                user_not_found ->
+                                    gen_tcp:send(Socket, list_to_binary("User not found: " ++ ToUser ++ "\n")),
+                                    loop(State)
+                            end;
+                        _ ->
+                            gen_tcp:send(Socket, list_to_binary("Usage: whisper: <username> <message>\n")),
+                            loop(State)
+                    end;
+
                 _ ->
                     gen_tcp:send(Socket, list_to_binary("Unknown command!\n"))
             end,

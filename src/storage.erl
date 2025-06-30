@@ -1,10 +1,19 @@
 -module(storage).
--export([get_username/2, add_client/3, get_current_room/2, get_all_sockets_in_same_room/2,
+-export([get_username/2, add_client/3, get_client_pid/2, get_current_room/2, get_all_sockets_in_same_room/2,
         create_room/3, delete_room/3, list_rooms/1, join_room/3, leave_room/2]).
 
 add_client(MemPid, Socket, Username) ->
     MemPid ! {add_new_client, Socket, Username},
     ok.
+
+get_client_pid(MemPid, Username) ->
+    MemPid ! {get_client_pid, self(), Username},
+    receive
+        {ok, ClientPid} ->
+            {ok, ClientPid};
+        user_not_found ->
+            user_not_found
+    end.
 
 get_current_room(MemPid, ClientSocket) ->
     MemPid ! {get_current_room, self(), ClientSocket},

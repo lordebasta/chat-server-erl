@@ -5,7 +5,6 @@ This simple starting versioon of the chat server will allow to users to connect 
 ## How to run locally
 
 ```
-rebar3 compile
 rebar3 shell
 ```
 
@@ -24,6 +23,7 @@ You will be asked your name and then you can execute any of these commands:
 `destroy:<room_name>`: will delete the room and kick everyone in it, if you are the room creator.
 `join:<room_name>`: will join the room.
 `leave`: will kick you out of the room you are currently in.
+`whisper: <username> <message>`: will send a message to the provided user.
 
 # Notes
 

@@ -41,8 +41,12 @@ loop(State) ->
             loop(NewState);
 
         {get_client_pid, ReceiverPid, Username} ->
-            {ok, Cpid} = dict:find(Username, ClientDict),
-            ReceiverPid ! {pid, Cpid},
+            case dict:find(Username, ClientDict) of 
+                {ok, Cpid} ->
+                    ReceiverPid ! {ok, Cpid};
+                error ->
+                    ReceiverPid ! user_not_found
+            end,
             loop(State);
 
         {get_username, ReceiverPid, Pid} ->
