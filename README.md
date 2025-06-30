@@ -24,6 +24,8 @@ You will be asked your name and then you can execute any of these commands:
 `join:<room_name>`: will join the room.
 `leave`: will kick you out of the room you are currently in.
 `whisper: <username> <message>`: will send a message to the provided user.
+`private: <room_name>`: will create a private room.
+`ínvite: <username>`: will invite an user. The user will be notified and can join the room. To invite an user, you have to be in the room.
 
 # Notes
 
