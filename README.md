@@ -29,4 +29,8 @@ You will be asked your name and then you can execute any of these commands:
 
 # Notes
 
-I left `io:format` calls inside the server because it's useful for development.
+There are some things I should refactor (and probably a lot more I'm not aware of), but I didn't because of the time.
+-I left `io:format` calls inside the server, instead of using proper logging tools.
+-Variable and file names are not consistent. `-spec` would have been nice for static analysis.
+-I didn't write tests (usually I write tests while developing, but since I didn't know the language and the principles around it, I focused on that).
+-I'm sure my architecture is not "OTP compliant" (did I say correctly?), but it would have taken me more time to learn it well and I focused on bringing a working project, even if imperfect.
